@@ -1,21 +1,37 @@
 #!/usr/bin/env node
 import { createLogger, resolveConfig } from "./config.js";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { MuseHost, resolveBinary } from "./muse/host.js";
 import { ModelCatalog } from "./muse/models.js";
+import { runTurn } from "./muse/turn.js";
 import { startProxy } from "./proxy/server.js";
 
 const USAGE = `open-muse — use your Muse Code subscription from OpenCode
 
 Usage:
-  open-muse doctor          Check that the muse CLI starts, is signed in, and list your models
+  open-muse doctor [--no-turn]
+                            Check that the muse CLI starts, is signed in, and list your models.
+                            The sign-in check runs one tiny turn; --no-turn skips it.
   open-muse serve [--port N] Run the OpenAI-compatible proxy standalone (default port 4517)
 
-Setup: add "open-muse" to the "plugin" list in ~/.config/opencode/opencode.json.`;
+Setup: add "open-muse" to "plugin" (OpenCode 1.x) or "plugins" (OpenCode 2.x) in
+~/.config/opencode/opencode.json.`;
 
-async function doctor(): Promise<number> {
+async function doctor(args: string[]): Promise<number> {
   const config = resolveConfig();
   const log = createLogger(config);
+  const bin = resolveBinary(config.museBin);
+  if (!bin) {
+    console.error(`✗ Could not find the Muse Code CLI ("${config.museBin}"). Install it, or set OPEN_MUSE_BIN.`);
+    return 1;
+  }
+  // Printed so a different `muse` earlier on PATH (or a shell alias) is easy to spot.
+  const version = spawnSync(bin, ["--version"], { encoding: "utf8", timeout: 30_000 }).stdout?.trim();
+  console.log(`✓ muse binary: ${bin}${version ? ` (${version})` : ""}`);
+
   const host = new MuseHost(config, log);
   let ok = true;
   try {
@@ -23,16 +39,12 @@ async function doctor(): Promise<number> {
     console.log(`✓ muse serve started (${init.serverInfo?.name ?? "muse"} ${init.serverInfo?.version ?? ""})`.trimEnd());
     console.log(`  muse home: ${init.museHome}`);
 
-    try {
-      const account = await host.request("account/read", {});
-      console.log(`✓ account: ${JSON.stringify(account)}`);
-    } catch {
-      console.log("· account status not available from this muse build (that's fine)");
-    }
-
     const models = await new ModelCatalog(host, config, log).refresh();
     console.log(`✓ ${models.length} model(s) available:`);
     for (const m of models) console.log(`  - ${config.providerId}/${m.id}${m.isDefault ? " (default)" : ""}`);
+
+    if (args.includes("--no-turn")) console.log("· sign-in not checked (--no-turn)");
+    else ok = (await checkSignIn(host, config, log)) && ok;
 
     if (process.platform === "win32") ok = checkWindowsSandbox(config.museBin) && ok;
   } catch (error) {
@@ -43,6 +55,51 @@ async function doctor(): Promise<number> {
   }
   if (ok) console.log('\nReady. In OpenCode, pick a "muse/..." model (e.g. /models).');
   return ok ? 0 : 1;
+}
+
+/**
+ * Listing models works signed out, and muse serve has no account call, so the only
+ * reliable sign-in check is a turn. It runs in an empty temp folder with the lowest
+ * effort and no tool approvals, so it costs a few tokens.
+ */
+async function checkSignIn(host: MuseHost, config: ReturnType<typeof resolveConfig>, log: ReturnType<typeof createLogger>): Promise<boolean> {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "open-muse-doctor-"));
+  try {
+    const started = await host.command("session/start", { workspaceRoot: workspace });
+    const sessionId = (started.session as { sessionId?: string } | undefined)?.sessionId;
+    if (!sessionId) throw new Error("muse serve did not return a session id");
+    host.markLoaded(sessionId);
+    const turn = runTurn(host, {
+      sessionId,
+      input: [{ type: "text", text: "Reply with just: OK" }],
+      reasoningEffort: "minimal",
+      approvals: "deny",
+      log,
+      signal: AbortSignal.timeout(120_000),
+    });
+    for await (const event of turn) {
+      if (event.type !== "done") continue;
+      if (!event.error) {
+        console.log("✓ signed in (test turn completed)");
+        return true;
+      }
+      if (event.error.kind === "authRequired") {
+        console.log("✗ Muse Code is not signed in. Run `muse login`, then run doctor again.");
+      } else if (event.error.quota !== undefined) {
+        console.log(`✗ signed in, but your plan's usage limit is reached: ${event.error.message}`);
+      } else {
+        console.log(`✗ test turn failed (${event.error.kind}): ${event.error.message}`);
+      }
+      return false;
+    }
+    console.log("✗ test turn ended without a result");
+    return false;
+  } catch (error) {
+    console.log(`✗ test turn failed: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
 }
 
 /** Muse's tools run in an OS sandbox; on Windows it needs a one-time elevated setup or every command fails. */
@@ -77,5 +134,5 @@ async function serve(args: string[]): Promise<number> {
 }
 
 const [command, ...rest] = process.argv.slice(2);
-const run = command === "doctor" ? doctor() : command === "serve" ? serve(rest) : Promise.resolve((console.log(USAGE), command ? 1 : 0));
+const run = command === "doctor" ? doctor(rest) : command === "serve" ? serve(rest) : Promise.resolve((console.log(USAGE), command ? 1 : 0));
 run.then((code) => process.exit(code));

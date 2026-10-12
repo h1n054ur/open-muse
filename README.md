@@ -70,6 +70,7 @@ flowchart LR
 | **Muse Code CLI** | 1.4.x (`@muse-code/sdk` is pinned to the matching release) |
 | **Muse Code plan** | Any plan; signed in through the CLI |
 | **OS** | macOS (Apple Silicon and Intel), Linux, Windows 10/11 |
+| **Tested on** | Windows 11 x64 (OpenCode 1.18.30 and 2.0.27) and macOS 27 on Apple Silicon (OpenCode 2.0.27), both with Muse Code 1.4.6 |
 | **Node.js** | ≥ 20, only for the `open-muse` CLI and building from source (inside OpenCode the plugin runs on OpenCode's own runtime) |
 
 ## Installation
@@ -158,8 +159,9 @@ opencode models muse     # OpenCode 1.x
 opencode models | grep '^muse/'     # OpenCode 2.x
 ```
 
-`doctor` starts `muse serve`, checks the protocol handshake, lists the models your account
-can use, and on Windows checks the sandbox. The `models` command should print entries like
+`doctor` shows which `muse` binary it found, starts `muse serve`, lists the models your
+account can use, runs one tiny turn in an empty temp folder to confirm you're signed in (a few
+tokens of quota; skip it with `--no-turn`), and on Windows checks the sandbox. The `models` command should print entries like
 `muse/muse-wonder-1.0`.
 
 Restart OpenCode after installing or upgrading.
@@ -270,7 +272,7 @@ after 30 days.
 ### Cancellation and errors
 
 - Pressing Esc in OpenCode closes the request, and open-muse sends `turn/cancel` to Muse.
-- **Not signed in:** HTTP 401 with "run `muse` … /login".
+- **Not signed in:** HTTP 401 with "run `muse login`".
 - **Plan limit reached:** HTTP 429 with Muse's message, so OpenCode treats it as retryable.
 - **`muse` not installed:** HTTP 503 with install instructions.
 - **`muse serve` crashed:** it's restarted on the next request, and sessions are resumed.

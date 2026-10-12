@@ -252,7 +252,7 @@ function failureStatus(error: MuseTurnError): number {
 
 function describeFailure(error: MuseTurnError): string {
   if (error.kind === "authRequired") {
-    return "Muse Code is not signed in. Run `muse` in a terminal and use /login, then try again.";
+    return "Muse Code is not signed in. Run `muse login` in a terminal, then try again.";
   }
   if (error.quota !== undefined) {
     return `Muse Code usage limit reached for your plan: ${error.message}`;
