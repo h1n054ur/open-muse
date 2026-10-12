@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startProxy } from "../dist/proxy/server.js";
 import { resolveConfig } from "../dist/config.js";
+import { resolveBinary } from "../dist/muse/host.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "open-muse-test-"));
@@ -236,4 +237,19 @@ test("muse binary missing gives an actionable 503", async () => {
   } finally {
     await broken.close();
   }
+});
+
+test("resolveBinary skips the installer's launcher for the active muse-bin", () => {
+  // Same layout on every platform: launcher on PATH, `.muse-version`, `muse-bin-<version>` beside it.
+  const dir = fs.mkdtempSync(path.join(tmp, "install-"));
+  const win = process.platform === "win32";
+  const launcher = path.join(dir, win ? "muse.cmd" : "muse");
+  const active = path.join(dir, `muse-bin-1.4.6-R6000.1${win ? ".exe" : ""}`);
+  fs.writeFileSync(launcher, win ? "@echo off\r\n" : "#!/usr/bin/env bash\n", { mode: 0o755 });
+  fs.writeFileSync(active, "", { mode: 0o755 });
+  fs.writeFileSync(path.join(dir, ".muse-version"), "1.4.6-R6000.1\n");
+  assert.equal(resolveBinary(path.join(dir, "muse")), active);
+
+  fs.rmSync(path.join(dir, ".muse-version"));
+  assert.equal(resolveBinary(path.join(dir, "muse")), launcher);
 });

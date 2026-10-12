@@ -6,6 +6,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "strict": true,
+    "newLine": "lf",
     "noUncheckedIndexedAccess": true,
     "declaration": true,
     "sourceMap": true,

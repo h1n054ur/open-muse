@@ -164,24 +164,26 @@ function describeSpawnFailure(museBin: string, error: unknown, stderr: string[])
 }
 
 /**
- * Find `bin` the way a shell would, then skip the Windows launcher shim.
+ * Find `bin` the way a shell would, then skip Muse's launcher.
  *
- * Meta's Windows installer puts a `muse.cmd` shim on PATH that runs a PowerShell
- * launcher, which in turn runs `muse-bin-<version>.exe` (version from `.muse-version`).
- * Piping the stdio protocol through PowerShell is fragile, so when the shim's
- * folder has an active binary we spawn that directly — the same file the launcher
- * would pick, so Muse's own auto-update still applies.
+ * Meta's installers put a launcher on PATH (`muse.cmd` + PowerShell on Windows,
+ * a bash script in `~/.local/bin` on macOS/Linux) that runs `muse-bin-<version>`
+ * from the same folder, with the version in `.muse-version`. We spawn that binary
+ * directly: piping the stdio protocol through PowerShell is fragile, and the
+ * launcher's update check would delay every start. It's the same file the
+ * launcher picks, so updates installed by running `muse` still apply.
  */
 export function resolveBinary(bin: string): string | undefined {
   const found = findOnPath(bin);
-  if (!found || !/\.(cmd|bat|ps1)$/i.test(found)) return found;
+  if (!found) return found;
   try {
     const dir = path.dirname(found);
     const version = fs.readFileSync(path.join(dir, ".muse-version"), "utf8").trim();
-    const active = path.join(dir, `muse-bin-${version}.exe`);
-    if (/^[\w.+-]+$/.test(version) && fs.statSync(active).isFile()) return active;
+    if (!/^[\w.+-]+$/.test(version)) return found;
+    const active = path.join(dir, `muse-bin-${version}${process.platform === "win32" ? ".exe" : ""}`);
+    if (fs.statSync(active).isFile()) return active;
   } catch {
-    // Not the Muse launcher layout; use the shim as-is.
+    // Not the Muse launcher layout; use what we found as-is.
   }
   return found;
 }
@@ -205,7 +207,13 @@ function findOnPath(bin: string): string | undefined {
   if (process.platform === "win32") {
     dirs.push(path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"), "Programs", "muse"));
   }
-  dirs.push(path.join(os.homedir(), ".local", "bin"), path.join(os.homedir(), ".muse", "bin"));
+  // macOS apps started from the Dock/Finder get a minimal PATH without these.
+  dirs.push(
+    path.join(os.homedir(), ".local", "bin"),
+    path.join(os.homedir(), ".muse", "bin"),
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+  );
   for (const dir of dirs) {
     const hit = candidates(path.join(dir, bin)).find(isFile);
     if (hit) return hit;

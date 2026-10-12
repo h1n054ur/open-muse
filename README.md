@@ -69,6 +69,7 @@ flowchart LR
 | **OpenCode** | 1.x (tested with 1.18.30) |
 | **Muse Code CLI** | 1.4.x (`@muse-code/sdk` is pinned to the matching release) |
 | **Muse Code plan** | Any plan; signed in through the CLI |
+| **OS** | macOS (Apple Silicon and Intel), Linux, Windows 10/11 |
 | **Node.js** | ≥ 20, only for the `open-muse` CLI and building from source (inside OpenCode the plugin runs on OpenCode's own runtime) |
 
 ## Installation
@@ -102,6 +103,8 @@ muse sandbox windows check   # should report status=ready
 
 Without it, Muse can still read and search files, but every shell command fails.
 
+macOS and Linux need no extra step: Muse uses the built-in OS sandbox there.
+
 ### 2. Add the plugin to OpenCode
 
 From npm, in `~/.config/opencode/opencode.json`:
@@ -129,7 +132,8 @@ npm run build
 }
 ```
 
-On Windows that path looks like `file:///C:/code/open-muse/dist/plugin.js`.
+On macOS that path looks like `file:///Users/you/code/open-muse/dist/plugin.js`; on Windows,
+`file:///C:/code/open-muse/dist/plugin.js`.
 
 ### 3. Verify
 
@@ -296,10 +300,13 @@ plugin registers:
 }
 ```
 
-**Windows note:** Meta's installer puts a `muse.cmd` launcher on PATH. open-muse runs the
-binary that launcher would pick (`muse-bin-<version>.exe`, from `.muse-version`) directly,
-because routing the stdio protocol through PowerShell is fragile. Muse's own auto-update
-still applies.
+**How the `muse` binary is found:** Meta's installers put a launcher on PATH (`muse.cmd` on
+Windows, a bash script in `~/.local/bin` on macOS and Linux) that runs `muse-bin-<version>`
+from the same folder. open-muse runs that binary directly, which avoids piping the stdio
+protocol through PowerShell and skips the launcher's update check on every start. It's the
+same file the launcher would pick, so running `muse` yourself still keeps it updated. If
+`muse` isn't on OpenCode's PATH (common for macOS apps started from the Dock), open-muse also
+looks in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`.
 
 ## Standalone proxy
 
