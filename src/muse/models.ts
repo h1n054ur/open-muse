@@ -106,3 +106,23 @@ export function toOpencodeModels(models: MuseModel[]): Record<string, unknown> {
   }
   return out;
 }
+
+/** OpenCode 2 `Model.Info` entries for `ctx.provider.transform` → `editor.add`. */
+export function toOpencode2Models(models: MuseModel[], providerID: string): Record<string, unknown>[] {
+  return models.map((m) => ({
+    id: m.id,
+    modelID: m.id,
+    providerID,
+    name: m.name,
+    // Muse runs its own tools; OpenCode's are never offered to it.
+    capabilities: { tools: false, input: ["text", "image"], output: ["text"] },
+    compatibility: { reasoningField: "reasoning_content" },
+    // `body` lands in the chat request as-is, which is where the proxy reads it.
+    variants: m.efforts.map((effort) => ({ id: effort, body: { reasoning_effort: effort } })),
+    time: { released: 0 },
+    cost: [],
+    status: "active",
+    enabled: true,
+    limit: { context: m.context, output: m.output },
+  }));
+}

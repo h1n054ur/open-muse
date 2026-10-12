@@ -253,3 +253,57 @@ test("resolveBinary skips the installer's launcher for the active muse-bin", () 
   fs.rmSync(path.join(dir, ".muse-version"));
   assert.equal(resolveBinary(path.join(dir, "muse")), launcher);
 });
+
+test("OpenCode 2 setup registers the provider in memory and tags model requests", async () => {
+  const { default: plugin } = await import("../dist/plugin.js");
+  assert.equal(typeof plugin.setup, "function");
+  assert.equal(typeof plugin.server, "function");
+
+  let transform, hook, hookOptions;
+  const disposed = [];
+  const registration = (name) => ({ dispose: async () => void disposed.push(name) });
+  const ctx = {
+    location: { directory: "/fallback" },
+    options: { museBin: process.execPath, museArgsPrefix: [path.join(here, "fake-muse.mjs")], stateDir: tmp },
+    provider: {
+      transform: async (cb) => ((transform = cb), registration("transform")),
+      reload: async () => {},
+    },
+    session: {
+      get: async ({ sessionID }) => ({ location: { directory: `/projects/${sessionID}` } }),
+      hook: async (name, cb, options) => (assert.equal(name, "model.request"), (hook = cb), (hookOptions = options), registration("hook")),
+    },
+  };
+  const cleanup = await plugin.setup(ctx);
+
+  const added = [];
+  transform({ add: (input) => added.push(input) });
+  assert.equal(added.length, 1);
+  const { info, models } = added[0];
+  assert.equal(info.id, "muse");
+  assert.equal(info.package, "@opencode/ai/providers/openai-compatible");
+  assert.match(info.settings.baseURL, /^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+  const spark = models.find((m) => m.id === "muse-spark-1.3");
+  assert.equal(spark.capabilities.tools, false);
+  assert.deepEqual(spark.variants.find((v) => v.id === "high"), { id: "high", body: { reasoning_effort: "high" } });
+  assert.deepEqual(hookOptions, { providerID: "muse" });
+
+  const primary = { sessionID: "ses_1", agent: "build", kind: "primary", headers: { keep: "me" } };
+  await hook(primary);
+  assert.deepEqual(primary.headers, {
+    keep: "me",
+    "x-open-muse-session": "ses_1",
+    "x-open-muse-agent": "build",
+    "x-open-muse-directory": "/projects/ses_1",
+  });
+  const title = { sessionID: "ses_1", agent: "build", kind: "title", headers: {} };
+  await hook(title);
+  assert.equal(title.headers["x-open-muse-agent"], "title");
+
+  // The registered provider answers through the proxy.
+  const out = await collect(await chat({ messages: [{ role: "user", content: "via v2" }] }, primary.headers, info.settings.baseURL));
+  assert.match(out.content, /Muse heard: via v2/);
+
+  await cleanup();
+  assert.deepEqual(disposed.sort(), ["hook", "transform"]);
+});

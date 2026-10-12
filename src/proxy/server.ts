@@ -15,9 +15,9 @@ export const HEADER_AGENT = "x-open-muse-agent";
 export const HEADER_DIRECTORY = "x-open-muse-directory";
 
 /** OpenCode agents whose requests are one-off jobs, not turns in the user's conversation. */
-const ONE_SHOT_AGENTS = new Set(["compaction", "summary"]);
+const ONE_SHOT_AGENTS = new Set(["compaction", "summary", "generate"]);
 /** OpenCode agents that should not change anything on disk. */
-const READ_ONLY_AGENTS = new Set(["plan", "explore", "compaction", "summary"]);
+const READ_ONLY_AGENTS = new Set(["plan", "explore", "compaction", "summary", "generate"]);
 
 interface ChatRequestBody {
   model?: string;

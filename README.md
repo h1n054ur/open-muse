@@ -66,7 +66,7 @@ flowchart LR
 
 | | |
 |---|---|
-| **OpenCode** | 1.x (tested with 1.18.30) |
+| **OpenCode** | 1.x (tested with 1.18.30) or 2.x (tested with 2.0.27) |
 | **Muse Code CLI** | 1.4.x (`@muse-code/sdk` is pinned to the matching release) |
 | **Muse Code plan** | Any plan; signed in through the CLI |
 | **OS** | macOS (Apple Silicon and Intel), Linux, Windows 10/11 |
@@ -107,12 +107,23 @@ macOS and Linux need no extra step: Muse uses the built-in OS sandbox there.
 
 ### 2. Add the plugin to OpenCode
 
-From npm, in `~/.config/opencode/opencode.json`:
+The same package works with OpenCode 1.x and 2.x, but the config key differs. Check yours
+with `opencode --version`.
+
+**OpenCode 1.x** uses `"plugin"`, in `~/.config/opencode/opencode.json`:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["open-muse"]
+}
+```
+
+**OpenCode 2.x** uses `"plugins"` (in the same file, or in `$OPENCODE_CONFIG_DIR` if you set it):
+
+```json
+{
+  "plugins": [{ "package": "open-muse" }]
 }
 ```
 
@@ -125,25 +136,30 @@ npm install
 npm run build
 ```
 
+Then point OpenCode at the checkout. 1.x takes the built file; 2.x takes the folder (it loads
+the root `server.js`):
+
 ```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["file:///absolute/path/to/open-muse/dist/plugin.js"]
-}
+{ "plugin": ["file:///absolute/path/to/open-muse/dist/plugin.js"] }
 ```
 
-On macOS that path looks like `file:///Users/you/code/open-muse/dist/plugin.js`; on Windows,
-`file:///C:/code/open-muse/dist/plugin.js`.
+```json
+{ "plugins": [{ "package": "file:///absolute/path/to/open-muse" }] }
+```
+
+On macOS the path looks like `file:///Users/you/code/open-muse`; on Windows,
+`file:///C:/code/open-muse`.
 
 ### 3. Verify
 
 ```bash
 npx open-muse doctor     # or: node dist/cli.js doctor
-opencode models muse
+opencode models muse     # OpenCode 1.x
+opencode models | grep '^muse/'     # OpenCode 2.x
 ```
 
 `doctor` starts `muse serve`, checks the protocol handshake, lists the models your account
-can use, and on Windows checks the sandbox. `opencode models muse` should print entries like
+can use, and on Windows checks the sandbox. The `models` command should print entries like
 `muse/muse-wonder-1.0`.
 
 Restart OpenCode after installing or upgrading.
@@ -162,6 +178,13 @@ opencode run --model muse/muse-wonder-1.0 --variant xhigh "Find and fix the race
 
 # Continue the last session
 opencode run -c --model muse/muse-wonder-1.0 "Now add a regression test"
+```
+
+OpenCode 2.x has no `--variant`; put the effort after `#` in the model instead. Add
+`--standalone` if no OpenCode server is running:
+
+```bash
+opencode run --standalone -m 'muse/muse-wonder-1.0#xhigh' "Find and fix the race in src/queue.ts"
 ```
 
 ## Models and reasoning effort
@@ -258,12 +281,20 @@ Image attachments are sent to Muse as image input parts.
 
 ## Configuration
 
-Options go in the plugin tuple in `opencode.json`, or in environment variables. Plugin options
+Options go in the plugin entry in `opencode.json`, or in environment variables. Plugin options
 take precedence.
 
 ```json
 {
   "plugin": [["open-muse", { "approvals": "deny", "toolDisplay": "content" }]]
+}
+```
+
+On OpenCode 2.x:
+
+```json
+{
+  "plugins": [{ "package": "open-muse", "options": { "approvals": "deny", "toolDisplay": "content" } }]
 }
 ```
 
@@ -285,8 +316,8 @@ take precedence.
 State directory default: `%LOCALAPPDATA%\open-muse` on Windows, `$XDG_DATA_HOME/open-muse`
 (or `~/.local/share/open-muse`) elsewhere.
 
-To customise model metadata, add a regular `provider.muse` block; it's merged over what the
-plugin registers:
+To customise model metadata on OpenCode 1.x, add a regular `provider.muse` block; it's merged
+over what the plugin registers:
 
 ```json
 {
@@ -350,7 +381,7 @@ OPEN_MUSE_TRACE_FILE=/tmp/muse-trace.jsonl opencode
 | `Muse Code is not signed in` | Run `muse login` and finish the browser sign-in. If you run OpenCode with a custom `XDG_CONFIG_HOME`, Muse looks for its credentials there too; pass the real one through `museEnv`. |
 | Shell commands fail on Windows (reads and searches work) | The Muse sandbox isn't set up. Run `muse sandbox windows setup` once (admin). `doctor` reports this. |
 | `Muse Code usage limit reached` | Your plan's 5-hour window is used up. Wait for it to reset or upgrade. |
-| No `muse/*` models in OpenCode | Check that the plugin entry is in the `opencode.json` you're actually using, and restart OpenCode. |
+| No `muse/*` models in OpenCode | Check that the plugin entry is in the `opencode.json` you're actually using, under the right key for your version (`plugin` on 1.x, `plugins` on 2.x), and restart OpenCode. On 2.x a `file://` entry must name the open-muse folder, not `dist/plugin.js`. |
 | Only the built-in default models listed | The catalog refreshes in the background; run `npx open-muse doctor` once to fetch it now. |
 | Muse seems to have forgotten the conversation | History was edited or compacted, so a fresh session was seeded with a transcript. That's expected. |
 | A Muse update broke the protocol | Update open-muse so its `@muse-code/sdk` matches `muse --version`. |
