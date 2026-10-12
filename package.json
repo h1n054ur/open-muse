@@ -1,0 +1,45 @@
+{
+  "name": "open-muse",
+  "version": "0.1.0",
+  "description": "Use your Muse Code subscription from OpenCode: an OpenCode plugin + local OpenAI-compatible proxy backed by the official Muse Code CLI (muse serve).",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/plugin.js",
+  "exports": {
+    ".": "./dist/plugin.js",
+    "./proxy": "./dist/proxy/server.js"
+  },
+  "bin": {
+    "open-muse": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test \"test/*.test.mjs\"",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "muse",
+    "muse-code",
+    "meta",
+    "openai-compatible"
+  ],
+  "dependencies": {
+    "@muse-code/sdk": "1.4.6"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.18.30",
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.0"
+  }
+}
